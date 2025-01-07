@@ -23,6 +23,8 @@ The training data is from the [Leipzig Corpora Collection](https://wortschatz.un
 - Built-in Devanagari alphabet initialization
 - Progress tracking during training
 - Compression ratio evaluation
+- Detailed token frequency analysis
+- Results visualization and statistics
 
 ## Installation
 
@@ -41,8 +43,12 @@ pip install -r requirements.txt
 │   ├── hindi_bpe_scratch.py     # From-scratch implementation
 │   ├── train_hindi_bpe.py       # Training script (HuggingFace)
 │   ├── train_hindi_bpe_scratch.py # Training script (Scratch)
+│   ├── analyze_results.py       # Analysis and visualization
 │   └── use_tokenizer.py         # Example usage
-├── hindi_bpe.json               # Trained tokenizer model
+├── results/
+│   └── tokenizer_stats.json     # Detailed tokenizer statistics
+├── hindi_bpe.json               # Trained tokenizer model (HuggingFace)
+├── hindi_bpe_scratch.json       # Trained tokenizer model (Scratch)
 └── requirements.txt             # Project dependencies
 ```
 
@@ -55,7 +61,7 @@ from src.hindi_bpe_trainer import create_hindi_bpe
 
 tokenizer = create_hindi_bpe(
     input_files=["path/to/your/hindi/text.txt"],
-    vocab_size=6000,
+    vocab_size=8000,
     min_frequency=2,
     save_path="hindi_bpe.json"
 )
@@ -67,64 +73,81 @@ tokenizer = create_hindi_bpe(
 from src.hindi_bpe_scratch import HindiBPE
 
 # Initialize and train
-bpe = HindiBPE(vocab_size=6000, min_freq=2)
+bpe = HindiBPE(vocab_size=8000, min_freq=2)
 bpe.train("path/to/your/hindi/text.txt")
 
 # Save the model
-bpe.save("hindi_bpe.json")
+bpe.save("hindi_bpe_scratch.json")
 
 # Load and use
-bpe.load("hindi_bpe.json")
+bpe.load("hindi_bpe_scratch.json")
 encoded = bpe.encode("आप कैसे हैं?")
 decoded = bpe.decode(encoded)
 ```
 
 ## Training Results
 
-### Scratch Implementation Results
-- Final vocabulary size: 10,000
-- Number of merges performed: 9,996
-- Total characters processed: 2,864,788
-- Unique characters: 260
-- Total words: 561,773
-- Unique words: 85,321
-- Words with frequency ≥ 2: 20,942
-- Total tokens processed: 739,090
-- Unique tokens: 9,576
-- Compression ratio: 3.88
+### Latest Implementation Results
+- Vocabulary size: 8,000
+- Total tokens processed: 853,384
+- Unique tokens: 7,425
+- Compression ratio: 385.83
 
 #### Token Frequency Analysis
-Top 10 most frequent tokens:
+Top 20 most frequent tokens:
 ```
-[UNK]: 71,084
-के: 21,412
-में: 15,782
-की: 13,014
-को: 9,882
-से: 9,554
-का: 7,753
+किया: 151,287
+के: 21,559
+में: 15,833
+की: 13,425
+को: 9,933
+से: 9,650
+का: 8,274
 और: 7,678
-ने: 7,103
-है।: 6,791
+ने: 7,295
+है।: 7,062
+पर: 6,243
+कि: 5,927
+है: 5,024
+भी: 4,640
+कर: 3,647
+एक: 3,613
+इस: 3,421
+नहीं: 3,420
+लिए: 3,183
+तो: 2,747
 ```
 
-#### Visualizations
-The token distribution visualization can be found in `results/token_distribution.png`, showing the frequency distribution of tokens in the trained vocabulary.
+## Features of the Scratch Implementation
 
-## Configuration
+1. **Linguistic-Aware Tokenization**:
+   - Pre-initialized with common Hindi words
+   - Special handling of Devanagari characters
+   - Support for common prefixes and suffixes
 
-The tokenizer can be customized with the following parameters:
+2. **Advanced Text Normalization**:
+   - NFKC Unicode normalization
+   - Special character handling
+   - Whitespace normalization
+   - Punctuation standardization
 
-- `vocab_size`: Size of the vocabulary (default: 6000)
-- `min_frequency`: Minimum frequency for a token to be included (default: 2)
-- Special tokens: [UNK], [PAD], [BOS], [EOS]
-- Pre-initialized with complete Devanagari alphabet
+3. **Performance Optimizations**:
+   - Efficient merge operations
+   - Progress tracking with tqdm
+   - Memory-efficient processing
+
+4. **Analysis Tools**:
+   - Token frequency analysis
+   - Compression ratio calculation
+   - Detailed statistics generation
 
 ## Dependencies
 
 - tokenizers==0.15.0
-- requests==2.31.0
-- tqdm (for progress bars)
+- tqdm>=4.65.0
+- matplotlib>=3.7.1
+- requests>=2.31.0
+- torch>=2.0.0
 
 ## License
 

@@ -22,7 +22,7 @@ def main():
     print("----------------")
     tokenizer = create_hindi_bpe(
         input_files,
-        vocab_size=10000,
+        vocab_size=6000,
         min_frequency=2,
         save_path="hindi_bpe.json"
     )

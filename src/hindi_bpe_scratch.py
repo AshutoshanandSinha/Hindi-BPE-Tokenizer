@@ -130,36 +130,14 @@ class HindiBPE:
         # 3. Replace variations with standard forms
         for old, new in self.char_mappings.items():
             text = text.replace(old, new)
-            
-        # 4. Normalize spaces and punctuation
+        
+        # 4. Normalize spaces and punctuation - modified
         text = re.sub(r'\s+', ' ', text)  # Multiple spaces to single space
-        text = re.sub(r'[?!।॥]+', '।', text)  # Normalize sentence endings
-        text = re.sub(r'[-_]+', '-', text)  # Normalize hyphens
-        text = re.sub(r'[""'']', '"', text)  # Normalize quotes
-        text = re.sub(r'\.{2,}', '...', text)  # Normalize ellipsis
-        
-        # 5. Handle numbers and mixed scripts
-        text = re.sub(r'(\d+),(?=\d{3})', r'\1', text)  # Remove thousands separator
-        text = re.sub(r'(\d+)/(\d+)', r'\1।\2', text)  # Normalize fractions
-        
-        # 6. Expand common abbreviations
-        words = text.split()
-        for i, word in enumerate(words):
-            if word in self.abbreviations:
-                words[i] = self.abbreviations[word]
-        text = ' '.join(words)
-        
-        # 7. Remove diacritics that appear without base characters
-        text = re.sub(r'([ािीुूृेैोौं])(?![अ-ह])', '', text)
-        
-        
-        # 8. Handle common typos and variations
-        text = re.sub(r'ं्', 'ं', text)  # Remove virama after anusvara
-        text = re.sub(r'ंं', 'ं', text)  # Remove duplicate anusvara
-        text = re.sub(r'ँं', 'ँ', text)  # Prefer chandrabindu over anusvara
-        
-        # 9. Normalize common conjunct forms
-        text = text.replace('श्री', 'श्री')  # Ensure consistent form of श्री
+        text = text.strip()  # Remove leading/trailing spaces
+        text = re.sub(r'[?!।॥]+', '।', text)
+        text = re.sub(r'[-_]+', '-', text)
+        text = re.sub(r'[""'']', '"', text)
+        text = re.sub(r'\.{2,}', '...', text)
         
         return text
     
