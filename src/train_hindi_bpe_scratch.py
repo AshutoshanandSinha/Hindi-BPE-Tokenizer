@@ -3,6 +3,7 @@ import os
 from collections import Counter
 import matplotlib.pyplot as plt
 import json
+import torch
 
 def analyze_and_save_results(tokenizer, input_file, output_dir="results"):
     """Analyze tokenizer performance and save results"""
@@ -42,8 +43,8 @@ def analyze_and_save_results(tokenizer, input_file, output_dir="results"):
     return stats
 
 def main():
-    # Initialize tokenizer
-    tokenizer = HindiBPE(vocab_size=10000, min_freq=2)
+    # Initialize tokenizer with larger vocab
+    tokenizer = HindiBPE(vocab_size=8000, min_freq=2)
     
     # Train
     input_file = "data/hin_mixed_2019_30K/hin_mixed_2019_30K-sentences.txt"

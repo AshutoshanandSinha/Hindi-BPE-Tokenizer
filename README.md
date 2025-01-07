@@ -55,7 +55,7 @@ from src.hindi_bpe_trainer import create_hindi_bpe
 
 tokenizer = create_hindi_bpe(
     input_files=["path/to/your/hindi/text.txt"],
-    vocab_size=10000,
+    vocab_size=6000,
     min_frequency=2,
     save_path="hindi_bpe.json"
 )
@@ -67,7 +67,7 @@ tokenizer = create_hindi_bpe(
 from src.hindi_bpe_scratch import HindiBPE
 
 # Initialize and train
-bpe = HindiBPE(vocab_size=10000, min_freq=2)
+bpe = HindiBPE(vocab_size=6000, min_freq=2)
 bpe.train("path/to/your/hindi/text.txt")
 
 # Save the model
@@ -115,7 +115,7 @@ The token distribution visualization can be found in `results/token_distribution
 
 The tokenizer can be customized with the following parameters:
 
-- `vocab_size`: Size of the vocabulary (default: 10000)
+- `vocab_size`: Size of the vocabulary (default: 6000)
 - `min_frequency`: Minimum frequency for a token to be included (default: 2)
 - Special tokens: [UNK], [PAD], [BOS], [EOS]
 - Pre-initialized with complete Devanagari alphabet

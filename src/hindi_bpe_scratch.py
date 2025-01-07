@@ -1,43 +1,216 @@
+import torch
 from collections import defaultdict, Counter
 import re
 import json
 from typing import Dict, List, Tuple, Set
 from tqdm.auto import tqdm
+import unicodedata
+import os
 
 class HindiBPE:
-    def __init__(self, vocab_size: int = 10000, min_freq: int = 2):
+    def __init__(self, vocab_size: int = 8000, min_freq: int = 2):
         self.vocab_size = vocab_size
         self.min_freq = min_freq
         self.vocab = {}
         self.merges = {}
         self.special_tokens = ["[UNK]", "[PAD]", "[BOS]", "[EOS]"]
         
-        # Initialize with Hindi characters
-        self.base_chars = set("अआइईउऊऋएऐओऔकखगघङचछजझञटठडढणतथदधनपफबभमयरलवशषसह़क्षत्रज्ञ")
+        # Common complete words that should be single tokens
+        self.common_words = {
+            "में", "का", "की", "के", "है", "से", "को", "और", "ने", "पर",
+            "कर", "था", "थी", "थे", "हैं", "गया", "गयी", "गये", "रहा", "रही",
+            "एक", "यह", "वह", "कि", "जो", "तो", "भी", "हो", "कुछ", "अब"
+        }
+        
+        # Initialize with complete words first
+        for word in self.common_words:
+            self.vocab[word] = len(self.vocab)
+        
+        # Then add special tokens
+        for token in self.special_tokens:
+            self.vocab[token] = len(self.vocab)
+        
+        # Finally add individual characters
+        self.base_chars = set("अआइईउऊऋएऐओऔकखगघङचछजझञटठडढणतथदधनपफबभमयरलवशषसह" + 
+                             "ा ि ी ु ू ृ े ै ो ौ ं ः ँ")
+        for char in self.base_chars:
+            if char.strip() and char not in self.vocab:
+                self.vocab[char] = len(self.vocab)
+        
+        # Common Hindi word endings and prefixes
+        self.common_suffixes = ["ों", "ाएं", "ाओं", "ाता", "ाती", "ाते", "ाना", "ाने", "ेगा", "ेगी", "कर", "िया", "ियों"]
+        self.common_prefixes = ["अन", "अध", "उप", "प्र", "सम", "अभि", "परि", "विश", "सर्व"]
+        
+        # Add normalization mappings
+        self.char_mappings = {
+            # Common variations of a
+            'ऍ': 'ए',
+            'ॲ': 'अ',
+            # Normalize chandrabindu
+            'ॐ': 'ओम्',
+            # Normalize nukta variations
+            'क़': 'क',
+            'ख़': 'ख',
+            'ग़': 'ग',
+            'ज़': 'ज',
+            'ड़': 'ड',
+            'ढ़': 'ढ',
+            'फ़': 'फ',
+            # Normalize traditional conjuncts
+            'क्ष': 'क्ष',
+            'त्र': 'त्र',
+            'ज्ञ': 'ज्ञ',
+            'श्र': 'श्र',
+            # Normalize different types of spaces
+            '\u200b': ' ',  # Zero width space
+            '\u200c': '',   # Zero width non-joiner
+            '\u200d': '',   # Zero width joiner
+            '\xa0': ' ',    # Non-breaking space
+        }
+        
+        # Common Hindi abbreviations
+        self.abbreviations = {
+            'डॉ': 'डॉक्टर',
+            'श्री': 'श्रीमान',
+            'सु': 'सुश्री',
+            'कु': 'कुमारी',
+            'प्रो': 'प्रोफेसर',
+        }
         
     def _tokenize_word(self, word: str) -> List[str]:
-        """Split word into individual characters"""
-        return list(word)
+        """Split word into meaningful Hindi subunits"""
+        word = self._normalize_text(word)
+        
+        # First check if it's a common word
+        if word in self.common_words:
+            return [word]
+        
+        tokens = []
+        i = 0
+        while i < len(word):
+            # Try to match longest possible meaningful unit
+            found = False
+            for length in range(min(6, len(word) - i), 0, -1):
+                subword = word[i:i+length]
+                if subword in self.common_words:
+                    tokens.append(subword)
+                    i += length
+                    found = True
+                    break
+            
+            if not found:
+                # Handle consonant clusters with vowel marks
+                if i < len(word) - 1 and word[i+1] == '्':
+                    j = i + 2
+                    while j < len(word) and word[j] not in "ािीुूृेैोौं":
+                        j += 1
+                    if j > i + 2:
+                        tokens.append(word[i:j])
+                        i = j
+                        continue
+                
+                # Handle single character with modifiers
+                char = word[i]
+                i += 1
+                while i < len(word) and word[i] in "ािीुूृेैोौंँःृ्":
+                    char += word[i]
+                    i += 1
+                tokens.append(char)
+        
+        return tokens
+    
+    def _normalize_text(self, text: str) -> str:
+        """Enhanced normalization for Hindi text"""
+        # 1. Basic cleanup
+        text = text.strip()
+        
+        # 2. NFKC normalization
+        text = unicodedata.normalize('NFKC', text)
+        
+        # 3. Replace variations with standard forms
+        for old, new in self.char_mappings.items():
+            text = text.replace(old, new)
+            
+        # 4. Normalize spaces and punctuation
+        text = re.sub(r'\s+', ' ', text)  # Multiple spaces to single space
+        text = re.sub(r'[?!।॥]+', '।', text)  # Normalize sentence endings
+        text = re.sub(r'[-_]+', '-', text)  # Normalize hyphens
+        text = re.sub(r'[""'']', '"', text)  # Normalize quotes
+        text = re.sub(r'\.{2,}', '...', text)  # Normalize ellipsis
+        
+        # 5. Handle numbers and mixed scripts
+        text = re.sub(r'(\d+),(?=\d{3})', r'\1', text)  # Remove thousands separator
+        text = re.sub(r'(\d+)/(\d+)', r'\1।\2', text)  # Normalize fractions
+        
+        # 6. Expand common abbreviations
+        words = text.split()
+        for i, word in enumerate(words):
+            if word in self.abbreviations:
+                words[i] = self.abbreviations[word]
+        text = ' '.join(words)
+        
+        # 7. Remove diacritics that appear without base characters
+        text = re.sub(r'([ािीुूृेैोौं])(?![अ-ह])', '', text)
+        
+        
+        # 8. Handle common typos and variations
+        text = re.sub(r'ं्', 'ं', text)  # Remove virama after anusvara
+        text = re.sub(r'ंं', 'ं', text)  # Remove duplicate anusvara
+        text = re.sub(r'ँं', 'ँ', text)  # Prefer chandrabindu over anusvara
+        
+        # 9. Normalize common conjunct forms
+        text = text.replace('श्री', 'श्री')  # Ensure consistent form of श्री
+        
+        return text
     
     def _get_stats(self, words: Dict[str, int]) -> Dict[Tuple[str, str], int]:
-        """Count frequency of adjacent pairs"""
-        pairs = defaultdict(int)
-        for word, freq in words.items():
-            symbols = word.split()
-            for i in range(len(symbols) - 1):
-                pairs[symbols[i], symbols[i + 1]] += freq
-        return pairs
-    
-    def _merge_pair(self, pair: Tuple[str, str], words: Dict[str, int]) -> Dict[str, int]:
-        """Merge all occurrences of the pair in the vocabulary"""
-        new_words = {}
-        bigram = ' '.join(pair)
-        replacement = ''.join(pair)
+        """Optimized frequency counting with linguistic awareness"""
+        pairs_dict = {}
         
         for word, freq in words.items():
+            symbols = word.split()
+            if len(symbols) < 2:
+                continue
+            
+            for j in range(len(symbols) - 1):
+                pair = (symbols[j], symbols[j + 1])
+                combined = ''.join(pair)
+                
+                # Boost based on linguistic patterns
+                boost = 1
+                
+                # Higher boost for complete word formations
+                if combined in ["में", "का", "की", "के", "से", "है", "को", "और", "ने", "पर"]:
+                    boost = 5
+                # Boost for common suffixes
+                elif any(combined.endswith(suffix) for suffix in self.common_suffixes):
+                    boost = 3
+                # Boost for common prefixes
+                elif any(combined.startswith(prefix) for prefix in self.common_prefixes):
+                    boost = 2
+                
+                pairs_dict[pair] = pairs_dict.get(pair, 0) + freq * boost
+        
+        return pairs_dict
+    
+    def _merge_pair(self, pair: Tuple[str, str], words: Dict[str, int]) -> Dict[str, int]:
+        """Highly optimized merge operation"""
+        new_words = {}
+        replacement = ''.join(pair)
+        
+        # Process all words at once
+        for word, freq in words.items():
+            if freq < self.min_freq:
+                continue
+            
             parts = word.split()
-            i = 0
+            if len(parts) < 2:
+                new_words[word] = freq
+                continue
+            
+            # Fast merge using list operations
             new_parts = []
+            i = 0
             while i < len(parts):
                 if i < len(parts) - 1 and parts[i] == pair[0] and parts[i + 1] == pair[1]:
                     new_parts.append(replacement)
@@ -45,88 +218,76 @@ class HindiBPE:
                 else:
                     new_parts.append(parts[i])
                     i += 1
-            new_word = ' '.join(new_parts)
-            new_words[new_word] = freq
+            
+            new_words[' '.join(new_parts)] = freq
         
         return new_words
     
     def train(self, input_file: str):
-        """Train BPE on input text"""
+        """Optimized training process"""
         print("\nPhase 1: Data Loading and Preprocessing")
         print("-" * 40)
+        
+        # Load data with progress tracking
+        file_size = os.path.getsize(input_file) / (1024 * 1024)
+        print(f"Loading file ({file_size:.2f} MB)...")
         
         with open(input_file, 'r', encoding='utf-8') as f:
             text = f.read()
         
-        # Add statistics about input data
-        total_chars = len(text)
-        unique_chars = len(set(text))
-        print(f"Total characters: {total_chars:,}")
-        print(f"Unique characters: {unique_chars}")
-        
-        # Normalize and split text
-        text = re.sub(r'\s+', ' ', text)
+        # Process initial statistics with progress tracking
+        print("\nTokenizing words...")
         words = text.split()
         total_words = len(words)
-        unique_words = len(set(words))
         print(f"Total words: {total_words:,}")
+        
+        print("\nCounting word frequencies...")
+        word_freqs = Counter(words)
+        unique_words = len(word_freqs)
         print(f"Unique words: {unique_words:,}")
         
-        print("\nPhase 2: Initial Vocabulary Building")
-        print("-" * 40)
-        word_freqs = Counter(words)
-        initial_vocab_size = sum(1 for freq in word_freqs.values() if freq >= self.min_freq)
-        print(f"Words with frequency >= {self.min_freq}: {initial_vocab_size:,}")
-        
-        # Initialize vocabulary with characters
+        print("\nInitializing vocabulary...")
+        # Initialize vocabulary with progress tracking
         vocab = {}
-        for word, freq in word_freqs.items():
-            if freq < self.min_freq:
-                continue
-            chars = ' '.join(self._tokenize_word(word))
-            vocab[chars] = freq
+        with tqdm(total=len(word_freqs), desc="Processing words") as pbar:
+            for word, freq in word_freqs.items():
+                if freq >= self.min_freq:
+                    chars = ' '.join(self._tokenize_word(word))
+                    vocab[chars] = freq
+                pbar.update(1)
         
-        # Add special tokens
+        # Initialize base vocabulary
+        print("\nAdding base characters and special tokens...")
+        initial_vocab_size = len(self.vocab)
+        for char in self.base_chars:
+            self.vocab[char] = len(self.vocab)
         for token in self.special_tokens:
             self.vocab[token] = len(self.vocab)
         
-        print("\nPhase 3: BPE Training")
+        print(f"Base vocabulary size: {len(self.vocab) - initial_vocab_size:,}")
+        print(f"Words above minimum frequency: {len(vocab):,}")
+        
+        print("\nPhase 2: BPE Training")
         print("-" * 40)
         num_merges = self.vocab_size - len(self.vocab)
         
-        # Main BPE training loop with progress bar
         with tqdm(total=num_merges, desc="Training BPE") as pbar:
             for i in range(num_merges):
                 pairs = self._get_stats(vocab)
                 if not pairs:
                     break
-                    
-                # Find most frequent pair
+                
                 best_pair = max(pairs.items(), key=lambda x: x[1])[0]
-                
-                # Merge pair in all words
                 vocab = self._merge_pair(best_pair, vocab)
-                
-                # Add to merges and vocabulary
                 self.merges[best_pair] = len(self.vocab)
                 self.vocab[''.join(best_pair)] = len(self.vocab)
                 
                 pbar.update(1)
         
-        print("\nPhase 4: Final Statistics")
+        print("\nPhase 3: Final Statistics")
         print("-" * 40)
         print(f"Final vocabulary size: {len(self.vocab):,}")
         print(f"Number of merges performed: {len(self.merges):,}")
-        
-        # Sample most frequent tokens
-        token_freqs = Counter()
-        for word, freq in word_freqs.items():
-            tokens = self.encode(word)
-            token_freqs.update({self.decode([t]): freq for t in tokens})
-        
-        print("\nTop 10 most frequent tokens:")
-        for token, freq in token_freqs.most_common(10):
-            print(f"  {token}: {freq:,}")
     
     def save(self, path: str):
         """Save tokenizer to file"""
