@@ -38,3 +38,10 @@ data/
 
 # Trained models
 *.bin 
+
+# Additional changes
+*.pyc
+.env
+.venv
+venv/
+.DS_Store 
