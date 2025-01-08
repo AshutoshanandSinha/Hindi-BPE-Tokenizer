@@ -1,6 +1,6 @@
 ---
 title: Hindi BPE Tokenizer
-emoji:🇳
+emoji:�
 colorFrom: blue
 colorTo: red
 sdk: streamlit
